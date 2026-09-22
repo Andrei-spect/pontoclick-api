@@ -124,11 +124,51 @@ Autentica um usuário existente.
 }
 ```
 
+### `POST /auth/forgot-password`
+
+Inicia a recuperação de senha. Gera um token (link, se `method` for `email`) ou um código de 6 dígitos (se `method` for `phone`), válido por 15 minutos.
+
+**Corpo da requisição:**
+```json
+{
+  "method": "email",
+  "contact": "joao@gmail.com"
+}
+```
+
+**Resposta (200):**
+```json
+{
+  "message": "Se o cadastro existir, um código/link de recuperação foi enviado.",
+  "dev_token": "a1b2c3d4..."
+}
+```
+
+> ⚠️ O campo `dev_token` só existe para facilitar os testes agora, no início do desenvolvimento — em produção, o token deve ser enviado por e-mail/SMS de verdade, e nunca devolvido na resposta da API. Isso já está marcado com `TODO` no código.
+
+### `POST /auth/reset-password`
+
+Confirma o token/código e define a nova senha.
+
+**Corpo da requisição:**
+```json
+{
+  "token": "a1b2c3d4...",
+  "newPassword": "novaSenha123"
+}
+```
+
+**Resposta (200):**
+```json
+{ "message": "Senha redefinida com sucesso!" }
+```
+
 ## Próximos passos
 
-- [ ] Recuperação de senha (`/auth/forgot-password`, `/auth/reset-password`)
+- [x] Recuperação de senha (`/auth/forgot-password`, `/auth/reset-password`)
 - [ ] Perfil do usuário (`/users/me`, editar perfil, alterar senha)
 - [ ] Registros de ponto (`/records`)
+- [ ] Envio real de e-mail/SMS (substituir o `dev_token` por um serviço de verdade antes de publicar)
 
 ## Sobre publicar na Play Store
 
