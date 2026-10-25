@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash VARCHAR(255) NOT NULL,
   role VARCHAR(100) NULL,        -- Cargo (ex: Desenvolvedor)
   company VARCHAR(150) NULL,     -- Empresa (ex: TechCorp)
+  photo_url VARCHAR(255) NULL,   -- Caminho da foto de perfil (ex: /uploads/avatars/1-ab12.jpg)
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;

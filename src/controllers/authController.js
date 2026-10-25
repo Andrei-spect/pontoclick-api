@@ -56,7 +56,7 @@ async function login(req, res) {
     }
 
     const [rows] = await pool.query(
-      'SELECT id, name, email, phone, role, company, password_hash FROM users WHERE email = ?',
+      'SELECT id, name, email, phone, role, company, photo_url, password_hash FROM users WHERE email = ?',
       [email]
     );
 
@@ -83,6 +83,7 @@ async function login(req, res) {
         phone: user.phone,
         role: user.role,
         company: user.company,
+        photoUrl: user.photo_url,
       },
     });
   } catch (err) {

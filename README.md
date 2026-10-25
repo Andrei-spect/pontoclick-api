@@ -163,10 +163,74 @@ Confirma o token/código e define a nova senha.
 { "message": "Senha redefinida com sucesso!" }
 ```
 
+### Rotas de perfil (exigem login)
+
+Todas as rotas de `/users` precisam do token no header:
+
+```
+Authorization: Bearer <token recebido no login>
+```
+
+Sem token, ou com token inválido/expirado, a resposta é `401`.
+
+#### `GET /users/me`
+
+Devolve os dados do usuário logado.
+
+**Resposta (200):**
+```json
+{ "user": { "id": 1, "name": "João Silva", "email": "joao@gmail.com", "phone": "11999999999", "role": "Desenvolvedor", "company": "TechCorp", "photoUrl": null } }
+```
+
+#### `PUT /users/me`
+
+Atualiza o perfil. `name` e `email` são obrigatórios; `phone`, `role` e `company` podem ir vazios (viram `null`).
+
+**Corpo da requisição:**
+```json
+{ "name": "João Silva", "email": "joao@gmail.com", "phone": "11999999999", "role": "Desenvolvedor", "company": "TechCorp" }
+```
+
+**Respostas:** `200` com o usuário atualizado · `400` nome vazio ou e-mail inválido · `409` e-mail já usado por outra conta.
+
+#### `PUT /users/change-password`
+
+Troca a senha de quem já está logado (diferente do `reset-password`, que é para quem esqueceu a senha).
+
+**Corpo da requisição:**
+```json
+{ "currentPassword": "senha123", "newPassword": "novaSenha456" }
+```
+
+**Respostas:** `200` senha alterada · `400` senha atual incorreta, nova senha curta (mín. 6) ou igual à atual.
+
+> A senha atual incorreta responde `400` e não `401` de propósito: o app trata `401` como "sessão expirada" e deslogaria o usuário.
+
+#### `POST /users/me/photo`
+
+Envia a foto de perfil. É um `multipart/form-data` com a imagem no campo **`photo`** (JPG, PNG ou WebP, até 5 MB). O formato é conferido pelos bytes do arquivo, não pelo nome ou tipo informado. A foto antiga é apagada.
+
+**Resposta (200):**
+```json
+{ "message": "Foto atualizada com sucesso!", "user": { "id": 1, "name": "João Silva", "photoUrl": "/uploads/avatars/1-3fa9c2d41b7e0a55.jpg" } }
+```
+
+`photoUrl` é um caminho relativo: o app monta o endereço completo juntando com a URL da API (`http://localhost:3000/uploads/avatars/...`). **Respostas:** `400` arquivo ausente ou formato inválido · `413` maior que 5 MB · `401` sem login.
+
+#### `DELETE /users/me/photo`
+
+Remove a foto de perfil (apaga o arquivo e volta `photoUrl` para `null`).
+
+**Onde as fotos ficam:** na pasta `uploads/avatars/`, na raiz do projeto (já está no `.gitignore`).
+
+> ⚠️ **Antes de publicar:** muitos serviços de hospedagem apagam os arquivos do disco a cada novo deploy. Em produção, use um disco persistente (VPS) ou mova as fotos para um armazenamento na nuvem (Cloudinary, S3...). Só o trecho que grava/apaga arquivos em `userController.js` precisa mudar.
+
+**Banco de dados:** a coluna `users.photo_url` é criada automaticamente quando o servidor inicia. A versão manual está em `database/migrations/001_add_photo_url.sql`.
+
 ## Próximos passos
 
 - [x] Recuperação de senha (`/auth/forgot-password`, `/auth/reset-password`)
-- [ ] Perfil do usuário (`/users/me`, editar perfil, alterar senha)
+- [x] Perfil do usuário (`/users/me`, editar perfil, alterar senha)
 - [ ] Registros de ponto (`/records`)
 - [ ] Envio real de e-mail/SMS (substituir o `dev_token` por um serviço de verdade antes de publicar)
 
