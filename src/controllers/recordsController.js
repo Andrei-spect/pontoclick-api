@@ -9,9 +9,40 @@ const LABELS = {
   saida: 'Saída',
 };
 
+const HOUR_MS = 60 * 60 * 1000;
 const MAX_RANGE_DAYS = 62;
 const FUTURE_TOLERANCE_MS = 5 * 60 * 1000; // tolera pequena diferença entre o relógio do app e o do servidor
-const MAX_EDIT_SHIFT_MS = 24 * 60 * 60 * 1000;
+const MAX_EDIT_SHIFT_MS = 24 * HOUR_MS;
+
+// Turno: da entrada até a saída cabem no máximo 16 h. Dentro desse prazo, um ponto
+// depois da meia-noite continua o turno aberto (work_date do dia da entrada).
+const MAX_SHIFT_HOURS = 16;
+// Ponto feito sem internet pode ser enviado até 72 h depois; mais antigo é recusado.
+const MAX_OFFLINE_HOURS = 72;
+// O servidor não sabe o fuso do aparelho: o horário do ponto precisa cair entre
+// a meia-noite do work_date no fuso mais adiantado (UTC+14) e o fim de um turno
+// de 16 h começado às 23:59 no fuso mais atrasado (UTC-12).
+const WORKDATE_BEFORE_MS = 14 * HOUR_MS;
+const WORKDATE_AFTER_MS = (24 + 12 + MAX_SHIFT_HOURS) * HOUR_MS;
+
+/// Turno ainda aberto de um dia ANTERIOR a [workDate]: tem entrada, não tem os 4
+/// pontos e a entrada foi há no máximo 16 h de [at]. Devolve o work_date dele ou null.
+async function findOpenShiftBefore(userId, workDate, at) {
+  const [rows] = await pool.query(
+    `SELECT DATE_FORMAT(work_date, '%Y-%m-%d') AS work_date, COUNT(*) AS total,
+            DATE_FORMAT(MIN(CASE WHEN type = 'entrada' THEN recorded_at END), '%Y-%m-%dT%H:%i:%sZ') AS entrada
+       FROM time_records
+      WHERE user_id = ? AND work_date < ?
+      GROUP BY work_date
+      ORDER BY work_date DESC
+      LIMIT 1`,
+    [userId, workDate]
+  );
+  const day = rows[0];
+  if (!day || !day.entrada || Number(day.total) >= SEQUENCE.length) return null;
+  const elapsed = at.getTime() - new Date(day.entrada).getTime();
+  return elapsed >= 0 && elapsed <= MAX_SHIFT_HOURS * HOUR_MS ? day.work_date : null;
+}
 
 // Datas saem do banco já formatadas (ISO em UTC), sem depender do fuso do servidor.
 const SELECT_COLUMNS = `
@@ -118,11 +149,23 @@ async function createRecord(req, res) {
       if (recordedAt.getTime() > Date.now() + FUTURE_TOLERANCE_MS) {
         return res.status(400).json({ error: 'O horário do ponto não pode estar no futuro.' });
       }
+      if (Date.now() - recordedAt.getTime() > MAX_OFFLINE_HOURS * HOUR_MS) {
+        return res.status(400).json({
+          error: `Este ponto foi feito há mais de ${MAX_OFFLINE_HOURS} horas e não pode mais ser enviado.`,
+        });
+      }
     }
 
-    const workDate = body.workDate ?? recordedAt.toISOString().slice(0, 10);
+    let workDate = body.workDate ?? recordedAt.toISOString().slice(0, 10);
     if (!isValidDay(workDate)) {
       return res.status(400).json({ error: 'Data do ponto inválida.' });
+    }
+    const workDateStart = new Date(`${workDate}T00:00:00Z`).getTime();
+    if (
+      recordedAt.getTime() < workDateStart - WORKDATE_BEFORE_MS ||
+      recordedAt.getTime() > workDateStart + WORKDATE_AFTER_MS
+    ) {
+      return res.status(400).json({ error: 'A data do ponto não confere com o horário registrado.' });
     }
 
     const latitude = body.latitude ?? null;
@@ -150,11 +193,26 @@ async function createRecord(req, res) {
     }
 
     // Sequência do dia: entrada -> intervalo -> volta -> saída.
-    const [day] = await pool.query(
-      `SELECT type, DATE_FORMAT(recorded_at, '%Y-%m-%dT%H:%i:%sZ') AS recorded_at
-         FROM time_records WHERE user_id = ? AND work_date = ? ORDER BY recorded_at ASC, id ASC`,
-      [req.userId, workDate]
-    );
+    const loadDay = async (date) => {
+      const [rows] = await pool.query(
+        `SELECT type, DATE_FORMAT(recorded_at, '%Y-%m-%dT%H:%i:%sZ') AS recorded_at
+           FROM time_records WHERE user_id = ? AND work_date = ? ORDER BY recorded_at ASC, id ASC`,
+        [req.userId, date]
+      );
+      return rows;
+    };
+    let day = await loadDay(workDate);
+
+    // Turno da noite: o dia pedido ainda está vazio, mas há um turno aberto de um dia
+    // anterior com entrada há no máximo 16 h -> o ponto continua aquele turno.
+    // (Também corrige apps antigos, que mandavam a data do relógio do aparelho.)
+    if (day.length === 0) {
+      const openShift = await findOpenShiftBefore(req.userId, workDate, recordedAt);
+      if (openShift) {
+        workDate = openShift;
+        day = await loadDay(workDate);
+      }
+    }
     if (day.length >= SEQUENCE.length) {
       return res.status(409).json({ error: 'Todos os pontos deste dia já foram registrados.', expectedType: null });
     }

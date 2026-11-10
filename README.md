@@ -126,42 +126,53 @@ Autentica um usuário existente.
 
 ### `POST /auth/forgot-password`
 
-Inicia a recuperação de senha. Gera um token (link, se `method` for `email`) ou um código de 6 dígitos (se `method` for `phone`), válido por 15 minutos.
+Envia para o e-mail um **código de 6 dígitos**, válido por 15 minutos.
 
 **Corpo da requisição:**
 ```json
-{
-  "method": "email",
-  "contact": "joao@gmail.com"
-}
+{ "email": "joao@gmail.com" }
 ```
 
-**Resposta (200):**
+**Resposta (200):** sempre a mesma, exista ou não a conta (a rota não revela quais e-mails estão cadastrados):
 ```json
-{
-  "message": "Se o cadastro existir, um código/link de recuperação foi enviado.",
-  "dev_token": "a1b2c3d4..."
-}
+{ "message": "Se houver uma conta com esse e-mail, enviamos um código de 6 dígitos." }
 ```
 
-> ⚠️ O campo `dev_token` só existe para facilitar os testes agora, no início do desenvolvimento — em produção, o token deve ser enviado por e-mail/SMS de verdade, e nunca devolvido na resposta da API. Isso já está marcado com `TODO` no código.
+**Outras respostas:** `400` e-mail inválido · `429` pedido repetido em menos de 60 s ou mais de 5 pedidos na mesma hora · `503` falha ao enviar o e-mail.
+
+- O banco guarda só o **hash** do código (HMAC-SHA256 com o `JWT_SECRET`); o código nunca é devolvido pela API.
+- Pedir um código novo invalida os anteriores.
+- **Desenvolvimento sem SMTP** (`SMTP_PASS` vazio): o código aparece só no terminal da API, numa linha `[DEV] Código de recuperação para ...`. Com `NODE_ENV=production` e sem SMTP, a rota responde `503`.
+
+**Configurar o envio (no `.env`):**
+
+| Variável | iCloud | Gmail |
+|---|---|---|
+| `SMTP_HOST` | `smtp.mail.me.com` | `smtp.gmail.com` |
+| `SMTP_PORT` | `587` | `587` |
+| `SMTP_USER` | seu e-mail do iCloud | seu e-mail do Gmail |
+| `SMTP_PASS` | senha de app (appleid.apple.com → Entrar e Segurança → Senhas de app) | senha de app (myaccount.google.com → Segurança → Senhas de app) |
+| `SMTP_FROM` | `'"PontoClick" <seu-email@icloud.com>'` (o iCloud exige que seja o mesmo e-mail do usuário) | `'"PontoClick" <seu-email@gmail.com>'` |
+
+> Use sempre uma **senha de app**, nunca a senha da sua conta. Reinicie a API depois de alterar o `.env`.
 
 ### `POST /auth/reset-password`
 
-Confirma o token/código e define a nova senha.
+Confere o código e define a nova senha.
 
 **Corpo da requisição:**
 ```json
-{
-  "token": "a1b2c3d4...",
-  "newPassword": "novaSenha123"
-}
+{ "email": "joao@gmail.com", "code": "123456", "newPassword": "novaSenha123" }
 ```
 
 **Resposta (200):**
 ```json
 { "message": "Senha redefinida com sucesso!" }
 ```
+
+**Outras respostas (400):** código inválido ou expirado · `Código incorreto. Você ainda tem N tentativas.` · após **5 erros** o código é bloqueado e é preciso pedir outro · senha com menos de 6 caracteres.
+
+**Banco de dados:** as mudanças em `password_resets` (coluna `attempts`, `expires_at` como `DATETIME`) são aplicadas automaticamente ao iniciar o servidor. A versão manual está em `database/migrations/003_password_resets_codes.sql`.
 
 ### Rotas de perfil (exigem login)
 
@@ -172,6 +183,8 @@ Authorization: Bearer <token recebido no login>
 ```
 
 Sem token, ou com token inválido/expirado, a resposta é `401`.
+
+Sem token, com token inválido/expirado ou **emitido antes da última troca de senha**, a resposta é `401`.
 
 #### `GET /users/me`
 
@@ -202,7 +215,9 @@ Troca a senha de quem já está logado (diferente do `reset-password`, que é pa
 { "currentPassword": "senha123", "newPassword": "novaSenha456" }
 ```
 
-**Respostas:** `200` senha alterada · `400` senha atual incorreta, nova senha curta (mín. 6) ou igual à atual.
+**Respostas:** `200` `{ "message": "...", "token": "..." }` · `400` senha atual incorreta, nova senha curta (mín. 6), longa (máx. 128) ou igual à atual.
+
+> A troca **encerra as sessões dos outros aparelhos**. O `token` da resposta substitui o anterior neste aparelho (o app já faz isso).
 
 > A senha atual incorreta responde `400` e não `401` de propósito: o app trata `401` como "sessão expirada" e deslogaria o usuário.
 
@@ -240,9 +255,11 @@ Datas: `recordedAt` é um instante em UTC (ex: `2026-10-25T14:32:05Z`) e `workDa
 ```
 
 - Só `type` e `workDate` são necessários. Sem `recordedAt`, vale o **relógio do servidor** (ponto feito online).
-- Ponto feito offline e enviado depois: mande também `recordedAt` com o horário real e um `clientId`. Reenviar o mesmo `clientId` não duplica (responde `200` com `"duplicate": true`).
+- Ponto feito offline e enviado depois: mande também `recordedAt` com o horário real e um `clientId`. Reenviar o mesmo `clientId` não duplica (responde `200` com `"duplicate": true`). Pontos com **mais de 72 horas** são recusados.
+- **Turno da noite:** um turno dura no máximo **16 horas**. Se o `workDate` pedido ainda não tem pontos e existe um turno aberto de um dia anterior (com entrada há no máximo 16 h e sem os 4 pontos), o ponto vai para o dia desse turno. Ex: entrada 22:00 do dia 10 → saída 06:00 do dia 11 é gravada no dia 10. Confira o `workDate` do `record` devolvido.
+- O horário precisa ser compatível com o `workDate` (entre a meia-noite do dia, considerando qualquer fuso, e o fim de um turno de 16 h).
 
-**Respostas:** `201` `{ "record": { ... } }` · `400` dados inválidos ou horário no futuro/antes do ponto anterior · `409` fora de ordem (`expectedType` diz qual era o esperado) ou dia completo.
+**Respostas:** `201` `{ "record": { ... } }` · `400` dados inválidos, horário no futuro/antes do ponto anterior, ponto offline com mais de 72 h ou data que não confere com o horário · `409` fora de ordem (`expectedType` diz qual era o esperado) ou dia completo.
 
 #### `GET /records?date=2026-10-25` e `GET /records?from=2026-10-01&to=2026-10-31`
 
@@ -260,12 +277,78 @@ Corrige o horário de um ponto: `{ "recordedAt": "2026-10-25T11:30:00Z" }`. O ho
 
 **Banco de dados:** as colunas novas de `time_records` são criadas automaticamente ao iniciar o servidor. A versão manual está em `database/migrations/002_time_records_details.sql`.
 
+#### `GET /users/me/notifications` e `PUT /users/me/notifications`
+
+Preferências dos **lembretes de bater o ponto**. Sem registro salvo, o `GET` devolve o padrão. Os avisos são agendados no próprio celular pelo app (Android e iPhone); a API só guarda as escolhas.
+
+```json
+{
+  "enabled": true,
+  "days": [1, 2, 3, 4, 5],
+  "reminders": {
+    "entrada":   { "enabled": true, "time": "08:00" },
+    "intervalo": { "enabled": true, "time": "12:00" },
+    "volta":     { "enabled": true, "time": "13:00" },
+    "saida":     { "enabled": true, "time": "17:00" }
+  }
+}
+```
+
+`days`: 1 = segunda … 7 = domingo. `time`: `HH:MM` no horário local do aparelho. Os horários ligados precisam seguir a ordem entrada → intervalo → volta → saída; a saída pode ser mais cedo que a entrada (turno da noite). **Respostas do PUT:** `200` com `settings` · `400` horário inválido ou fora de ordem.
+
+**Banco de dados:** tabela `notification_settings` criada automaticamente ao iniciar o servidor (manual: `database/migrations/007_notification_settings.sql`).
+
+### Locais de trabalho (exigem login)
+
+Cada usuário cadastra os próprios locais (até 20). O app compara o GPS com eles para mostrar "Você está em: ..." e grava o nome do local junto com o ponto (`locationName`).
+
+| Rota | Corpo | Resposta |
+|---|---|---|
+| `GET /locations` | — | `{ "locations": [ { "id", "name", "latitude", "longitude", "radiusMeters" } ] }` |
+| `POST /locations` | `{ "name", "latitude", "longitude", "radiusMeters"? }` | `201` `{ "location": { ... } }` |
+| `PUT /locations/:id` | só os campos que mudam | `200` `{ "location": { ... } }` |
+| `DELETE /locations/:id` | — | `200` (os pontos já registrados mantêm o nome do local) |
+
+**Regras:** nome de 2 a 100 caracteres e único por usuário (`409` se repetir) · raio de 50 a 1000 m (padrão 150) · coordenadas válidas · `404` para local de outro usuário.
+
+**Banco de dados:** a tabela `work_locations` é criada automaticamente ao iniciar o servidor. A versão manual está em `database/migrations/006_work_locations.sql`.
+
+### Suporte (exige login)
+
+#### `POST /support`
+
+Envia uma mensagem da tela "Ajuda e suporte". Ela é gravada em `support_messages` e enviada por e-mail para `SUPPORT_EMAIL` (padrão: `SMTP_USER`), com nome, e-mail, aparelho e versão do app. O "Responder" do e-mail vai direto para o usuário.
+
+```json
+{ "message": "O ponto de ontem não apareceu", "appVersion": "1.0.0", "platform": "android" }
+```
+
+**Respostas:** `201` `{ "message": "Mensagem enviada! ..." }` · `400` mensagem com menos de 10 ou mais de 2000 caracteres · `429` mais de 5 mensagens na mesma hora.
+
+Se o e-mail falhar, a mensagem continua salva (coluna `emailed = 0`). Sem SMTP configurado, em desenvolvimento ela aparece no terminal da API.
+
+**Banco de dados:** a tabela é criada automaticamente ao iniciar o servidor. A versão manual está em `database/migrations/005_support_messages.sql`.
+
+## Segurança
+
+- **Limite de tentativas** (por IP, em memória — zera ao reiniciar a API), resposta `429` com `{ "error": "..." }`:
+  - `POST /auth/login`: 10 tentativas **erradas** a cada 15 min por IP + e-mail (acertos não contam; outras contas na mesma rede não são afetadas);
+  - `POST /auth/register`: 5 por hora por IP;
+  - `POST /auth/forgot-password` e `/auth/reset-password`: 20 a cada 15 min por IP (além dos limites por conta).
+- **Sessões**: o token leva a versão da sessão (`users.token_version`). Trocar ou redefinir a senha sobe a versão e todos os tokens antigos passam a receber `401`.
+- **Entradas validadas**: e-mail sempre em minúsculas e sem espaços; tamanhos máximos iguais aos das colunas; senha de 6 a 128 caracteres.
+- **Respostas de erro sempre em JSON**, inclusive rota inexistente (`404`), JSON malformado (`400`) e corpo acima de 100 KB (`413`).
+- **Cabeçalhos de segurança** com `helmet`.
+- **Hospedagem**: atrás de proxy (Render, Railway, Nginx), defina `TRUST_PROXY=1`; para limitar o app web a um domínio, `CORS_ORIGINS=https://seu-dominio` (várias separadas por vírgula). Use um `JWT_SECRET` longo e aleatório (a API avisa no terminal se tiver menos de 32 caracteres) — trocá-lo desconecta todos os usuários.
+
+**Banco de dados:** a coluna `users.token_version` é criada automaticamente ao iniciar o servidor. A versão manual está em `database/migrations/004_users_token_version.sql`.
+
 ## Próximos passos
 
 - [x] Recuperação de senha (`/auth/forgot-password`, `/auth/reset-password`)
 - [x] Perfil do usuário (`/users/me`, editar perfil, alterar senha)
 - [x] Registros de ponto (`/records`)
-- [ ] Envio real de e-mail/SMS (substituir o `dev_token` por um serviço de verdade antes de publicar)
+- [x] Envio real do código de recuperação por e-mail (SMTP)
 
 ## Sobre publicar na Play Store
 

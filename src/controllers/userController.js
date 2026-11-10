@@ -3,6 +3,8 @@ const crypto = require('crypto');
 const fs = require('fs/promises');
 const path = require('path');
 const pool = require('../config/database');
+const { generateToken } = require('../utils/jwt');
+const { normalizeEmail, isValidEmail, optionalText, passwordError, lengthError } = require('../utils/validation');
 
 const SALT_ROUNDS = 10;
 const PUBLIC_COLUMNS = 'id, name, email, phone, role, company, photo_url';
@@ -24,16 +26,6 @@ function toPublicUser(row) {
   };
 }
 
-/// Campos opcionais chegam do app como texto; texto vazio vira NULL no banco.
-function optionalText(value) {
-  if (value === undefined || value === null) return null;
-  const trimmed = String(value).trim();
-  return trimmed === '' ? null : trimmed;
-}
-
-function isValidEmail(email) {
-  return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
 
 /// Descobre o formato REAL da imagem pelos primeiros bytes (e não pelo tipo
 /// que o cliente diz que é, que pode ser mentira). Devolve a extensão ou null.
@@ -79,17 +71,22 @@ async function getMe(req, res) {
 /// Corpo esperado: { name, email, phone?, role?, company? }
 async function updateMe(req, res) {
   try {
-    const name = optionalText(req.body.name);
-    const email = optionalText(req.body.email);
-    const phone = optionalText(req.body.phone);
-    const role = optionalText(req.body.role);
-    const company = optionalText(req.body.company);
+    const body = req.body || {};
+    const name = optionalText(body.name);
+    const email = normalizeEmail(body.email);
+    const phone = optionalText(body.phone);
+    const role = optionalText(body.role);
+    const company = optionalText(body.company);
 
     if (!name) {
       return res.status(400).json({ error: 'O nome é obrigatório.' });
     }
     if (!isValidEmail(email)) {
       return res.status(400).json({ error: 'Informe um e-mail válido.' });
+    }
+    const tooLong = lengthError({ name, phone, role, company });
+    if (tooLong) {
+      return res.status(400).json({ error: tooLong });
     }
 
     // O e-mail precisa continuar único — mas o próprio usuário pode mantê-lo.
@@ -117,18 +114,21 @@ async function updateMe(req, res) {
 
 /// PUT /users/change-password
 /// Corpo esperado: { currentPassword, newPassword }
+/// Resposta: { message, token } — a troca encerra as sessões dos OUTROS aparelhos;
+/// o app guarda o token novo para continuar conectado neste.
 ///
 /// Senha atual incorreta responde 400 (e não 401) de propósito — o app trata
 /// 401 como "sessão expirada" e deslogaria o usuário à toa.
 async function changePassword(req, res) {
   try {
-    const { currentPassword, newPassword } = req.body;
+    const { currentPassword, newPassword } = req.body || {};
 
-    if (!currentPassword || !newPassword) {
+    if (typeof currentPassword !== 'string' || !currentPassword || newPassword === undefined) {
       return res.status(400).json({ error: 'Informe a senha atual e a nova senha.' });
     }
-    if (newPassword.length < 6) {
-      return res.status(400).json({ error: 'A nova senha deve ter pelo menos 6 caracteres.' });
+    const invalid = passwordError(newPassword, 'A nova senha');
+    if (invalid) {
+      return res.status(400).json({ error: invalid });
     }
     if (newPassword === currentPassword) {
       return res.status(400).json({ error: 'A nova senha deve ser diferente da atual.' });
@@ -145,9 +145,14 @@ async function changePassword(req, res) {
     }
 
     const newHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
-    await pool.query('UPDATE users SET password_hash = ? WHERE id = ?', [newHash, req.userId]);
+    await pool.query('UPDATE users SET password_hash = ?, token_version = token_version + 1 WHERE id = ?', [
+      newHash,
+      req.userId,
+    ]);
+    const [[updated]] = await pool.query('SELECT token_version FROM users WHERE id = ?', [req.userId]);
+    const token = generateToken({ userId: req.userId, tokenVersion: updated.token_version });
 
-    return res.status(200).json({ message: 'Senha alterada com sucesso!' });
+    return res.status(200).json({ message: 'Senha alterada com sucesso!', token });
   } catch (err) {
     console.error('Erro em changePassword:', err);
     return res.status(500).json({ error: 'Erro interno ao alterar a senha.' });
