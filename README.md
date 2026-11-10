@@ -227,11 +227,44 @@ Remove a foto de perfil (apaga o arquivo e volta `photoUrl` para `null`).
 
 **Banco de dados:** a coluna `users.photo_url` é criada automaticamente quando o servidor inicia. A versão manual está em `database/migrations/001_add_photo_url.sql`.
 
+### Rotas de registros de ponto (exigem login)
+
+A ordem dos pontos em um dia é sempre **entrada → intervalo → volta_intervalo → saida**, e cada tipo só existe uma vez por dia. O servidor valida isso.
+
+Datas: `recordedAt` é um instante em UTC (ex: `2026-10-25T14:32:05Z`) e `workDate` é o dia **local** do usuário (`2026-10-25`). O app manda o `workDate` com o fuso do aparelho.
+
+#### `POST /records`
+
+```json
+{ "type": "entrada", "workDate": "2026-10-25", "latitude": -23.55, "longitude": -46.63, "accuracy": 12, "locationName": "Escritório Central" }
+```
+
+- Só `type` e `workDate` são necessários. Sem `recordedAt`, vale o **relógio do servidor** (ponto feito online).
+- Ponto feito offline e enviado depois: mande também `recordedAt` com o horário real e um `clientId`. Reenviar o mesmo `clientId` não duplica (responde `200` com `"duplicate": true`).
+
+**Respostas:** `201` `{ "record": { ... } }` · `400` dados inválidos ou horário no futuro/antes do ponto anterior · `409` fora de ordem (`expectedType` diz qual era o esperado) ou dia completo.
+
+#### `GET /records?date=2026-10-25` e `GET /records?from=2026-10-01&to=2026-10-31`
+
+Lista os pontos do dia (ou do período, máx. 62 dias) do usuário logado, em ordem de horário.
+
+```json
+{ "records": [ { "id": 7, "type": "entrada", "recordedAt": "2026-10-25T11:00:00Z", "workDate": "2026-10-25",
+  "latitude": -23.55, "longitude": -46.63, "accuracy": 12, "locationName": "Escritório Central",
+  "originalRecordedAt": null, "edited": false } ] }
+```
+
+#### `PUT /records/:id`
+
+Corrige o horário de um ponto: `{ "recordedAt": "2026-10-25T11:30:00Z" }`. O horário original fica guardado (`originalRecordedAt`) e o ponto aparece como `edited: true`. O novo horário precisa respeitar a ordem do dia e ficar a até 24 h do original. **Respostas:** `200` · `400` horário inválido · `404` ponto não encontrado (ou de outro usuário).
+
+**Banco de dados:** as colunas novas de `time_records` são criadas automaticamente ao iniciar o servidor. A versão manual está em `database/migrations/002_time_records_details.sql`.
+
 ## Próximos passos
 
 - [x] Recuperação de senha (`/auth/forgot-password`, `/auth/reset-password`)
 - [x] Perfil do usuário (`/users/me`, editar perfil, alterar senha)
-- [ ] Registros de ponto (`/records`)
+- [x] Registros de ponto (`/records`)
 - [ ] Envio real de e-mail/SMS (substituir o `dev_token` por um serviço de verdade antes de publicar)
 
 ## Sobre publicar na Play Store

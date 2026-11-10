@@ -5,6 +5,7 @@ const path = require('path');
 
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
+const recordsRoutes = require('./routes/recordsRoutes');
 const { ensureSchema } = require('./config/migrations');
 
 const app = express();
@@ -28,6 +29,7 @@ app.get('/', (req, res) => {
 
 app.use('/auth', authRoutes);
 app.use('/users', userRoutes);
+app.use('/records', recordsRoutes);
 
 const PORT = process.env.PORT || 3000;
 

@@ -53,8 +53,19 @@ CREATE TABLE IF NOT EXISTS time_records (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   user_id INT UNSIGNED NOT NULL,
   type ENUM('entrada', 'intervalo', 'volta_intervalo', 'saida') NOT NULL,
-  recorded_at DATETIME NOT NULL,
+  recorded_at DATETIME NOT NULL,              -- horário exato do ponto, sempre em UTC
+  work_date DATE NULL,                        -- dia do ponto na data local do usuário (YYYY-MM-DD)
+  client_id VARCHAR(64) NULL,                 -- id gerado no app; evita duplicar pontos offline reenviados
+  latitude DECIMAL(9,6) NULL,
+  longitude DECIMAL(9,6) NULL,
+  accuracy_m SMALLINT UNSIGNED NULL,          -- precisão do GPS, em metros
+  location_name VARCHAR(100) NULL,            -- ex: "Escritório Central"
+  original_recorded_at DATETIME NULL,         -- horário original, se o ponto foi editado
+  edited_at DATETIME NULL,                    -- quando foi editado (NULL = nunca)
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-  INDEX idx_user_date (user_id, recorded_at)
+  INDEX idx_user_date (user_id, recorded_at),
+  INDEX idx_user_workdate (user_id, work_date),
+  UNIQUE INDEX uq_user_day_type (user_id, work_date, type),
+  UNIQUE INDEX uq_user_client (user_id, client_id)
 ) ENGINE=InnoDB;
