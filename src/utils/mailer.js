@@ -1,16 +1,48 @@
 const nodemailer = require('nodemailer');
 
-/// Envio de e-mails (SMTP). Configuração no .env:
-///   SMTP_HOST, SMTP_PORT (587 = STARTTLS, 465 = SSL), SMTP_USER, SMTP_PASS
-///   SMTP_FROM (opcional) — remetente; padrão: "PontoClick <SMTP_USER>"
+/// Envio de e-mails. Dois jeitos, configurados no .env:
 ///
-/// iCloud: host smtp.mail.me.com, porta 587, usuário = e-mail do iCloud e
-/// senha = "senha de app" gerada em appleid.apple.com (não a senha da conta).
+/// 1) Brevo (API HTTPS) — usado quando BREVO_API_KEY existe. Necessário em
+///    hospedagens que bloqueiam SMTP (ex: plano gratuito do Render).
+///      BREVO_API_KEY, MAIL_FROM_EMAIL (remetente verificado no Brevo),
+///      MAIL_FROM_NAME (opcional, padrão "PontoClick")
+///
+/// 2) SMTP — SMTP_HOST, SMTP_PORT (587 = STARTTLS, 465 = SSL), SMTP_USER, SMTP_PASS
+///    e SMTP_FROM (opcional; padrão "PontoClick <SMTP_USER>").
+///    Gmail: smtp.gmail.com, porta 587, com "senha de app" (não a senha da conta).
 
 let transporter = null;
 
+function useBrevo() {
+  return Boolean(process.env.BREVO_API_KEY && process.env.MAIL_FROM_EMAIL);
+}
+
 function isMailConfigured() {
-  return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+  return useBrevo() || Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+}
+
+/// Envia pela API do Brevo (https://developers.brevo.com/reference/sendtransacemail).
+async function sendWithBrevo({ to, subject, text, html, replyTo }) {
+  const body = {
+    sender: { email: process.env.MAIL_FROM_EMAIL, name: process.env.MAIL_FROM_NAME || 'PontoClick' },
+    to: [{ email: to }],
+    subject,
+    textContent: text,
+    htmlContent: html,
+  };
+  if (replyTo) body.replyTo = replyTo;
+
+  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: { 'api-key': process.env.BREVO_API_KEY, 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(20000),
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`Brevo respondeu ${response.status}: ${detail.slice(0, 300)}`);
+  }
+  return response.json().catch(() => ({}));
 }
 
 function getTransporter() {
@@ -30,10 +62,19 @@ function getTransporter() {
   return transporter;
 }
 
-/// Envia um e-mail. Lança erro se o SMTP recusar ou não responder.
-async function sendMail({ to, subject, text, html }) {
+/// Envia um e-mail. Lança erro se o serviço recusar ou não responder.
+/// replyTo: { email, name } — para onde vai o "Responder".
+async function sendMail({ to, subject, text, html, replyTo }) {
+  if (useBrevo()) return sendWithBrevo({ to, subject, text, html, replyTo });
   const from = process.env.SMTP_FROM || `"PontoClick" <${process.env.SMTP_USER}>`;
-  return getTransporter().sendMail({ from, to, subject, text, html });
+  return getTransporter().sendMail({
+    from,
+    to,
+    subject,
+    text,
+    html,
+    replyTo: replyTo ? { address: replyTo.email, name: replyTo.name } : undefined,
+  });
 }
 
 /// E-mail com o código de recuperação de senha.
@@ -100,10 +141,9 @@ async function sendSupportMessage({ to, user, message, appVersion, platform, mes
 </html>`;
 
   const preview = message.replace(/\s+/g, ' ').slice(0, 60);
-  return getTransporter().sendMail({
-    from: process.env.SMTP_FROM || `"PontoClick" <${process.env.SMTP_USER}>`,
+  return sendMail({
     to,
-    replyTo: `"${user.name.replace(/"/g, '')}" <${user.email}>`,
+    replyTo: { email: user.email, name: user.name },
     subject: `[Suporte PontoClick] ${user.name}: ${preview}${message.length > 60 ? '…' : ''}`,
     text,
     html,

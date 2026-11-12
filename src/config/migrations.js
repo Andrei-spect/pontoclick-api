@@ -1,4 +1,24 @@
+const fs = require('fs/promises');
+const path = require('path');
 const pool = require('./database');
+const { createDatabaseIfMissing } = require('./database');
+
+/// Instalação nova (banco vazio, ex: na nuvem): cria o banco e roda o
+/// database/schema.sql inteiro. Num banco que já tem a tabela users, não faz nada.
+async function installBaseSchema() {
+  await createDatabaseIfMissing();
+  if (await tableExists('users')) return;
+  const sql = await fs.readFile(path.join(__dirname, '..', '..', 'database', 'schema.sql'), 'utf8');
+  const statements = sql
+    .split('\n')
+    .map((line) => line.replace(/--.*$/, '')) // tira os comentários (alguns têm ";")
+    .join('\n')
+    .split(';')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  for (const statement of statements) await pool.query(statement);
+  console.log(`Banco novo: ${statements.length} comandos do schema.sql aplicados.`);
+}
 
 /// Tabelas criadas depois da primeira versão do banco (CREATE TABLE IF NOT EXISTS:
 /// rodar de novo não faz nada). Mesma definição de database/schema.sql.
@@ -48,6 +68,18 @@ const TABLES = [
       saida_time CHAR(5) NOT NULL DEFAULT '17:00',
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB`,
+  },
+  {
+    name: 'user_photos',
+    ddl: `CREATE TABLE IF NOT EXISTS user_photos (
+      filename VARCHAR(64) PRIMARY KEY,
+      user_id INT UNSIGNED NOT NULL,
+      mime VARCHAR(20) NOT NULL,
+      data MEDIUMBLOB NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      INDEX idx_user_photos_user (user_id)
     ) ENGINE=InnoDB`,
   },
 ];
@@ -131,6 +163,7 @@ async function indexExists(table, name) {
 /// o servidor, para que atualizar o código nunca quebre por esquecer um ALTER TABLE.
 /// As versões manuais estão em database/migrations/.
 async function ensureSchema() {
+  await installBaseSchema();
   for (const { name, ddl } of TABLES) {
     if (!(await tableExists(name))) {
       await pool.query(ddl);

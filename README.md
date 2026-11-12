@@ -238,7 +238,7 @@ Remove a foto de perfil (apaga o arquivo e volta `photoUrl` para `null`).
 
 **Onde as fotos ficam:** na pasta `uploads/avatars/`, na raiz do projeto (já está no `.gitignore`).
 
-> ⚠️ **Antes de publicar:** muitos serviços de hospedagem apagam os arquivos do disco a cada novo deploy. Em produção, use um disco persistente (VPS) ou mova as fotos para um armazenamento na nuvem (Cloudinary, S3...). Só o trecho que grava/apaga arquivos em `userController.js` precisa mudar.
+> Fotos: por padrão ficam em `uploads/avatars/`. Em hospedagem sem disco permanente (ex: Render gratuito), use `PHOTO_STORAGE=db` para guardá-las no banco (tabela `user_photos`); a URL é a mesma.
 
 **Banco de dados:** a coluna `users.photo_url` é criada automaticamente quando o servidor inicia. A versão manual está em `database/migrations/001_add_photo_url.sql`.
 
@@ -338,6 +338,10 @@ Envia uma mensagem da tela "Ajuda e suporte". Ela é gravada em `support_message
 Se o e-mail falhar, a mensagem continua salva (coluna `emailed = 0`). Sem SMTP configurado, em desenvolvimento ela aparece no terminal da API.
 
 **Banco de dados:** a tabela é criada automaticamente ao iniciar o servidor. A versão manual está em `database/migrations/005_support_messages.sql`.
+
+## Publicar de graça (Render + TiDB + Brevo)
+
+Passo a passo em [`deploy/RENDER.md`](deploy/RENDER.md). Para um servidor próprio (Oracle Cloud, VPS), use `deploy/setup.sh`.
 
 ## Páginas públicas (exigidas pelas lojas)
 

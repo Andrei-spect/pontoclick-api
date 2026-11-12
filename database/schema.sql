@@ -128,3 +128,18 @@ CREATE TABLE IF NOT EXISTS notification_settings (
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
+
+-- ----------------------------------------------------------
+-- Tabela: user_photos
+-- Fotos de perfil guardadas no banco (só com PHOTO_STORAGE=db,
+-- para hospedagens sem disco permanente). Senão ficam em uploads/.
+-- ----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_photos (
+  filename VARCHAR(64) PRIMARY KEY,               -- mesmo nome usado na URL /uploads/avatars/<arquivo>
+  user_id INT UNSIGNED NOT NULL,
+  mime VARCHAR(20) NOT NULL,                      -- image/jpeg, image/png ou image/webp
+  data MEDIUMBLOB NOT NULL,                       -- a imagem (até 5 MB)
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  INDEX idx_user_photos_user (user_id)
+) ENGINE=InnoDB;

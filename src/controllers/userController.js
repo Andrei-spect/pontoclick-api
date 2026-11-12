@@ -1,17 +1,13 @@
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
-const fs = require('fs/promises');
-const path = require('path');
 const pool = require('../config/database');
 const { generateToken } = require('../utils/jwt');
+const { savePhoto, removePhoto } = require('../utils/photoStore');
 const { normalizeEmail, isValidEmail, optionalText, passwordError, lengthError } = require('../utils/validation');
 
 const SALT_ROUNDS = 10;
 const PUBLIC_COLUMNS = 'id, name, email, phone, role, company, photo_url';
 
-// Onde as fotos ficam no disco e por qual caminho são servidas (ver server.js).
-const UPLOAD_DIR = path.join(__dirname, '..', '..', 'uploads', 'avatars');
-const PUBLIC_PREFIX = '/uploads/avatars/';
 
 /// Formato que o app recebe (camelCase), sem nada sensível como o hash da senha.
 function toPublicUser(row) {
@@ -38,17 +34,6 @@ function detectImageExtension(buffer) {
     return 'webp';
   }
   return null;
-}
-
-/// Apaga do disco a foto antiga. path.basename impede que um valor estranho
-/// no banco aponte para fora da pasta de fotos.
-async function removePhotoFile(photoUrl) {
-  if (!photoUrl || !photoUrl.startsWith(PUBLIC_PREFIX)) return;
-  try {
-    await fs.unlink(path.join(UPLOAD_DIR, path.basename(photoUrl)));
-  } catch (err) {
-    if (err.code !== 'ENOENT') console.error('Não foi possível apagar a foto antiga:', err.message);
-  }
 }
 
 /// GET /users/me
@@ -162,7 +147,7 @@ async function changePassword(req, res) {
 /// POST /users/me/photo
 /// multipart/form-data com a imagem no campo "photo" (JPG, PNG ou WebP, até 5 MB).
 async function uploadPhoto(req, res) {
-  let savedPath = null;
+  let savedUrl = null;
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'Envie uma imagem no campo "photo".' });
@@ -181,20 +166,18 @@ async function uploadPhoto(req, res) {
     // Nome novo e aleatório a cada envio: ninguém adivinha a URL e o app não
     // mostra a foto antiga guardada em cache.
     const filename = `${req.userId}-${crypto.randomBytes(8).toString('hex')}.${extension}`;
-    await fs.mkdir(UPLOAD_DIR, { recursive: true });
-    savedPath = path.join(UPLOAD_DIR, filename);
-    await fs.writeFile(savedPath, req.file.buffer);
+    savedUrl = await savePhoto(req.userId, filename, req.file.buffer);
 
-    await pool.query('UPDATE users SET photo_url = ? WHERE id = ?', [PUBLIC_PREFIX + filename, req.userId]);
-    savedPath = null; // gravou no banco: o arquivo novo passa a valer
+    await pool.query('UPDATE users SET photo_url = ? WHERE id = ?', [savedUrl, req.userId]);
+    savedUrl = null; // gravou no perfil: a foto nova passa a valer
 
-    await removePhotoFile(current[0].photo_url);
+    await removePhoto(current[0].photo_url);
 
     const [rows] = await pool.query(`SELECT ${PUBLIC_COLUMNS} FROM users WHERE id = ?`, [req.userId]);
     return res.status(200).json({ message: 'Foto atualizada com sucesso!', user: toPublicUser(rows[0]) });
   } catch (err) {
-    // Se algo falhou depois de gravar o arquivo, não deixa lixo no disco.
-    if (savedPath) await fs.unlink(savedPath).catch(() => {});
+    // Se algo falhou depois de gravar a foto, não deixa lixo guardado.
+    if (savedUrl) await removePhoto(savedUrl);
     console.error('Erro em uploadPhoto:', err);
     return res.status(500).json({ error: 'Erro interno ao salvar a foto.' });
   }
@@ -209,7 +192,7 @@ async function deletePhoto(req, res) {
     }
 
     await pool.query('UPDATE users SET photo_url = NULL WHERE id = ?', [req.userId]);
-    await removePhotoFile(current[0].photo_url);
+    await removePhoto(current[0].photo_url);
 
     const [rows] = await pool.query(`SELECT ${PUBLIC_COLUMNS} FROM users WHERE id = ?`, [req.userId]);
     return res.status(200).json({ message: 'Foto removida.', user: toPublicUser(rows[0]) });
@@ -245,7 +228,7 @@ async function deleteMe(req, res) {
     }
 
     await pool.query('DELETE FROM users WHERE id = ?', [req.userId]);
-    await removePhotoFile(rows[0].photo_url);
+    await removePhoto(rows[0].photo_url);
 
     return res.status(200).json({ message: 'Sua conta e todos os seus dados foram excluídos.' });
   } catch (err) {

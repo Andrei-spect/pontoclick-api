@@ -43,7 +43,7 @@ async function createSupportMessage(req, res) {
       [user.id, message, appVersion, platform]
     );
 
-    const to = process.env.SUPPORT_EMAIL || process.env.SMTP_USER;
+    const to = process.env.SUPPORT_EMAIL || process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER;
     if (isMailConfigured() && to) {
       try {
         await sendSupportMessage({ to, user, message, appVersion, platform, messageId: insert.insertId });

@@ -11,6 +11,7 @@ const recordsRoutes = require('./routes/recordsRoutes');
 const supportRoutes = require('./routes/supportRoutes');
 const locationsRoutes = require('./routes/locationsRoutes');
 const { ensureSchema } = require('./config/migrations');
+const { servePhotoFromDatabase } = require('./utils/photoStore');
 
 const app = express();
 
@@ -30,7 +31,8 @@ app.use(cors(allowedOrigins.length ? { origin: allowedOrigins } : undefined));
 // Corpo JSON de até 100 KB (as fotos vão por multipart, com limite próprio de 5 MB).
 app.use(express.json({ limit: '100kb' }));
 
-// Fotos de perfil enviadas pelos usuários (pasta "uploads" na raiz do projeto).
+// Fotos de perfil: do banco (PHOTO_STORAGE=db) ou da pasta "uploads" na raiz do projeto.
+app.get('/uploads/avatars/:file', servePhotoFromDatabase);
 // "nosniff" impede o navegador de tentar interpretar a imagem como outra coisa.
 app.use(
   '/uploads',
@@ -40,7 +42,7 @@ app.use(
 );
 
 // Páginas públicas exigidas pelas lojas: política de privacidade e como excluir a conta.
-// O e-mail de contato vem do SUPPORT_EMAIL (ou SMTP_USER) do .env.
+// O e-mail de contato vem do SUPPORT_EMAIL (ou MAIL_FROM_EMAIL / SMTP_USER) do .env.
 const PAGES = {
   '/privacidade': 'privacidade.html',
   '/excluir-conta': 'excluir-conta.html',
@@ -50,7 +52,7 @@ for (const [route, file] of Object.entries(PAGES)) {
   app.get(route, (req, res, next) => {
     fs.readFile(path.join(__dirname, 'pages', file), 'utf8', (err, html) => {
       if (err) return next(err);
-      const email = process.env.SUPPORT_EMAIL || process.env.SMTP_USER || '';
+      const email = process.env.SUPPORT_EMAIL || process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER || '';
       res.type('html').send(html.replaceAll('{{SUPPORT_EMAIL}}', email).replaceAll('{{UPDATED_AT}}', PAGES_UPDATED_AT));
     });
   });
