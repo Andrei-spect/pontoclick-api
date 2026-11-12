@@ -41,4 +41,11 @@ const passwordResetLimiter = limiter({
   message: 'Muitas tentativas de recuperação de senha. Aguarde 15 minutos e tente novamente.',
 });
 
-module.exports = { loginLimiter, registerLimiter, passwordResetLimiter };
+/// DELETE /users/me — confirmação por senha: 5 tentativas a cada 15 min por IP.
+const accountDeletionLimiter = limiter({
+  windowMinutes: 15,
+  max: 5,
+  message: 'Muitas tentativas de excluir a conta. Aguarde 15 minutos e tente novamente.',
+});
+
+module.exports = { loginLimiter, registerLimiter, passwordResetLimiter, accountDeletionLimiter };

@@ -219,4 +219,39 @@ async function deletePhoto(req, res) {
   }
 }
 
-module.exports = { getMe, updateMe, changePassword, uploadPhoto, deletePhoto };
+/// DELETE /users/me
+/// Corpo esperado: { password }
+///
+/// Exclui a conta e TODOS os dados do usuário, sem volta: pontos, locais de
+/// trabalho, preferências, mensagens de suporte, códigos de recuperação
+/// (ON DELETE CASCADE no banco) e a foto de perfil no disco.
+/// Exigido pela App Store e pela Google Play para apps com cadastro.
+/// Senha errada responde 400 (e não 401), pelo mesmo motivo do change-password.
+async function deleteMe(req, res) {
+  try {
+    const { password } = req.body || {};
+    if (typeof password !== 'string' || password.length === 0) {
+      return res.status(400).json({ error: 'Digite sua senha para confirmar a exclusão.' });
+    }
+
+    const [rows] = await pool.query('SELECT password_hash, photo_url FROM users WHERE id = ?', [req.userId]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado.' });
+    }
+
+    const matches = await bcrypt.compare(password, rows[0].password_hash);
+    if (!matches) {
+      return res.status(400).json({ error: 'Senha incorreta.' });
+    }
+
+    await pool.query('DELETE FROM users WHERE id = ?', [req.userId]);
+    await removePhotoFile(rows[0].photo_url);
+
+    return res.status(200).json({ message: 'Sua conta e todos os seus dados foram excluídos.' });
+  } catch (err) {
+    console.error('Erro em deleteMe:', err);
+    return res.status(500).json({ error: 'Erro interno ao excluir a conta.' });
+  }
+}
+
+module.exports = { getMe, updateMe, changePassword, uploadPhoto, deletePhoto, deleteMe };

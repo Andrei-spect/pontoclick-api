@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const path = require('path');
+const fs = require('fs');
 
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
@@ -37,6 +38,23 @@ app.use(
     setHeaders: (res) => res.set('X-Content-Type-Options', 'nosniff'),
   })
 );
+
+// Páginas públicas exigidas pelas lojas: política de privacidade e como excluir a conta.
+// O e-mail de contato vem do SUPPORT_EMAIL (ou SMTP_USER) do .env.
+const PAGES = {
+  '/privacidade': 'privacidade.html',
+  '/excluir-conta': 'excluir-conta.html',
+};
+const PAGES_UPDATED_AT = '12 de novembro de 2026';
+for (const [route, file] of Object.entries(PAGES)) {
+  app.get(route, (req, res, next) => {
+    fs.readFile(path.join(__dirname, 'pages', file), 'utf8', (err, html) => {
+      if (err) return next(err);
+      const email = process.env.SUPPORT_EMAIL || process.env.SMTP_USER || '';
+      res.type('html').send(html.replaceAll('{{SUPPORT_EMAIL}}', email).replaceAll('{{UPDATED_AT}}', PAGES_UPDATED_AT));
+    });
+  });
+}
 
 // Rota de teste — útil para confirmar que a API está no ar.
 app.get('/', (req, res) => {

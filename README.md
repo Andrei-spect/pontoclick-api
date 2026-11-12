@@ -277,6 +277,16 @@ Corrige o horário de um ponto: `{ "recordedAt": "2026-10-25T11:30:00Z" }`. O ho
 
 **Banco de dados:** as colunas novas de `time_records` são criadas automaticamente ao iniciar o servidor. A versão manual está em `database/migrations/002_time_records_details.sql`.
 
+#### `DELETE /users/me`
+
+Exclui a conta e **todos** os dados do usuário, sem volta: perfil, foto, pontos, locais de trabalho, preferências, mensagens de suporte e códigos de recuperação (cascata no banco). Exigido pela App Store e pela Google Play para apps com cadastro.
+
+```json
+{ "password": "senha123" }
+```
+
+**Respostas:** `200` conta excluída · `400` senha ausente ou incorreta (400, não 401, pelo mesmo motivo do change-password) · `429` mais de 5 tentativas em 15 min.
+
 #### `GET /users/me/notifications` e `PUT /users/me/notifications`
 
 Preferências dos **lembretes de bater o ponto**. Sem registro salvo, o `GET` devolve o padrão. Os avisos são agendados no próprio celular pelo app (Android e iPhone); a API só guarda as escolhas.
@@ -328,6 +338,13 @@ Envia uma mensagem da tela "Ajuda e suporte". Ela é gravada em `support_message
 Se o e-mail falhar, a mensagem continua salva (coluna `emailed = 0`). Sem SMTP configurado, em desenvolvimento ela aparece no terminal da API.
 
 **Banco de dados:** a tabela é criada automaticamente ao iniciar o servidor. A versão manual está em `database/migrations/005_support_messages.sql`.
+
+## Páginas públicas (exigidas pelas lojas)
+
+- `GET /privacidade` — Política de Privacidade (LGPD), em `src/pages/privacidade.html`.
+- `GET /excluir-conta` — como excluir a conta (o Google Play pede um link fora do app), em `src/pages/excluir-conta.html`.
+
+O e-mail de contato nas páginas vem do `SUPPORT_EMAIL` do `.env`; a data de atualização fica em `PAGES_UPDATED_AT` no `server.js` (atualize ao mudar o texto). Em produção, informe nas lojas os endereços `https://SEU-DOMINIO/privacidade` e `https://SEU-DOMINIO/excluir-conta`.
 
 ## Segurança
 

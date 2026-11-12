@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Política de Privacidade — PontoClick</title>
+<style>
+  :root { --bg: #ffffff; --text: #101010; --muted: #4b4b46; --line: #e4e2dd; --accent: #4341d9; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #000000; --text: #ffffff; --muted: #cccccc; --line: #3d3d3d; --accent: #a9a8ff; } }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 32px 20px 64px; }
+  h1 { font-size: 28px; line-height: 1.25; margin: 0 0 4px; }
+  h2 { font-size: 19px; margin: 32px 0 8px; }
+  p, li { color: var(--muted); }
+  ul { padding-left: 20px; }
+  a { color: var(--accent); }
+  .meta { font-size: 14px; color: var(--muted); margin-bottom: 24px; }
+  hr { border: none; border-top: 1px solid var(--line); margin: 32px 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Política de Privacidade do PontoClick</h1>
+  <p class="meta">Última atualização: {{UPDATED_AT}}</p>
+
+  <p>Esta política explica quais dados o aplicativo PontoClick coleta, para que usa, com quem compartilha e como você pode controlá-los, conforme a Lei Geral de Proteção de Dados (Lei nº 13.709/2018 — LGPD).</p>
+
+  <h2>1. Quem é o responsável</h2>
+  <p>O PontoClick é desenvolvido por Andrei Barbosa. Para qualquer assunto sobre seus dados, escreva para <a href="mailto:{{SUPPORT_EMAIL}}">{{SUPPORT_EMAIL}}</a>.</p>
+
+  <h2>2. Quais dados coletamos</h2>
+  <ul>
+    <li><strong>Dados da conta:</strong> nome, e-mail e senha (guardada apenas de forma criptografada, sem possibilidade de leitura). Opcionalmente: celular, cargo, empresa e foto de perfil.</li>
+    <li><strong>Registros de ponto:</strong> tipo (entrada, intervalo, volta, saída), data e horário, e correções de horário que você fizer (guardamos também o horário original).</li>
+    <li><strong>Localização:</strong> latitude, longitude e precisão do GPS <strong>apenas no momento em que você bate o ponto</strong> ou cadastra um local de trabalho, e o nome do local identificado. O app não acompanha sua localização em segundo plano.</li>
+    <li><strong>Locais de trabalho</strong> que você cadastrar (nome, posição e raio).</li>
+    <li><strong>Preferências de lembretes</strong> (dias e horários). Os lembretes são agendados no próprio aparelho.</li>
+    <li><strong>Mensagens ao suporte</strong> que você enviar, com o tipo de aparelho e a versão do app.</li>
+  </ul>
+  <p>Não coletamos contatos, fotos da galeria (além da foto de perfil que você escolher), dados de pagamento nem identificadores de publicidade. O app não exibe anúncios.</p>
+
+  <h2>3. Para que usamos</h2>
+  <ul>
+    <li>Registrar e mostrar seus pontos, calcular horas trabalhadas e horas extras e gerar o relatório mensal.</li>
+    <li>Identificar em qual local de trabalho o ponto foi registrado.</li>
+    <li>Enviar o código de recuperação de senha e responder às suas mensagens de suporte.</li>
+    <li>Manter a segurança da conta (por exemplo, limitar tentativas de login).</li>
+  </ul>
+  <p>A base legal é a execução do serviço que você solicitou ao criar a conta (art. 7º, V, da LGPD) e, para a localização, o seu consentimento dado na permissão do aparelho, que pode ser revogado a qualquer momento nos ajustes do celular.</p>
+
+  <h2>4. Com quem compartilhamos</h2>
+  <p>Não vendemos nem alugamos seus dados. Eles são tratados apenas por fornecedores necessários para o funcionamento do serviço:</p>
+  <ul>
+    <li>o provedor de hospedagem onde ficam o servidor e o banco de dados;</li>
+    <li>o provedor de e-mail usado para enviar códigos de recuperação e mensagens de suporte.</li>
+  </ul>
+  <p>Também podemos fornecer dados quando exigido por lei ou por ordem judicial.</p>
+
+  <h2>5. Por quanto tempo guardamos</h2>
+  <p>Enquanto sua conta existir. Ao excluir a conta, todos os seus dados (perfil, foto, pontos, locais, preferências e mensagens) são apagados do banco de dados imediatamente. Registros técnicos do servidor, usados para corrigir erros, podem conter seu e-mail por tempo limitado.</p>
+
+  <h2>6. Seus direitos</h2>
+  <p>Você pode, a qualquer momento:</p>
+  <ul>
+    <li><strong>acessar e corrigir</strong> seus dados em Perfil &gt; Editar perfil e na tela de Registros;</li>
+    <li><strong>obter uma cópia</strong> dos seus pontos em Registros &gt; Exportar PDF, ou pedir os demais dados pelo e-mail acima;</li>
+    <li><strong>excluir a conta e todos os dados</strong> em Perfil &gt; Excluir conta (veja também <a href="/excluir-conta">como excluir sua conta</a>);</li>
+    <li><strong>revogar a permissão de localização</strong> nos ajustes do celular (o app continua funcionando, sem identificar o local);</li>
+    <li>pedir informações sobre o tratamento dos seus dados e apresentar reclamação à Autoridade Nacional de Proteção de Dados (ANPD).</li>
+  </ul>
+
+  <h2>7. Segurança</h2>
+  <p>As senhas são guardadas com criptografia de mão única (bcrypt), a comunicação com o servidor usa conexão segura (HTTPS) e o acesso aos dados exige login. Trocar ou redefinir a senha encerra as sessões abertas em outros aparelhos.</p>
+
+  <h2>8. Menores de idade</h2>
+  <p>O PontoClick é destinado a profissionais e não é direcionado a menores de 18 anos.</p>
+
+  <h2>9. Alterações</h2>
+  <p>Se esta política mudar, a data no topo será atualizada e, em mudanças importantes, avisaremos no aplicativo.</p>
+
+  <hr>
+  <p>Dúvidas: <a href="mailto:{{SUPPORT_EMAIL}}">{{SUPPORT_EMAIL}}</a></p>
+</main>
+</body>
+</html>
